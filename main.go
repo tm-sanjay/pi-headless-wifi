@@ -15,14 +15,13 @@ type WifiDetails struct {
 
 func main() {
 	fmt.Println("Starting server...")
+	fmt.Println("localhost:8080")
 
 	http.HandleFunc("/", home)
 	http.HandleFunc("/submit", submit)
 	http.HandleFunc("/wifilist", getWifiList)
 	http.Handle("/static/", http.StripPrefix("/static/", http.FileServer(http.Dir("static"))))
 	http.ListenAndServe(":8080", nil)
-
-	fmt.Println("localhost:8080")
 }
 
 // Function to handle the home page
