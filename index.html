@@ -4,14 +4,21 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <style>
     body {font-family: Arial, Helvetica, sans-serif;}
-    form {border: 3px solid #f1f1f1;}
+    form {
+      border: 3px;
+      border-style: solid;
+      border-color: #f1f1f1;
+      border-radius: 5px;
+    }
     input[type=text], input[type=password] {
       width: 100%;
       padding: 12px 20px;
-      margin: 8px 0;
+      margin: 10px 0;
       display: inline-block;
       border: 1px solid #ccc;
+      border-radius: 5px;
       box-sizing: border-box;
+      font-size: 16px;
     }
     button {
       background-color: #4CAF50;
@@ -21,6 +28,7 @@
       border: none;
       cursor: pointer;
       width: 100%;
+      border-radius: 5px;
     }
     button:hover {
       opacity: 0.8;
@@ -41,30 +49,6 @@
     .container {
       padding: 16px;
     }
-    .select-box {
-      position: relative;
-      display: block;
-      width: 100%;
-      margin: 0 auto;
-      font-family: 'Open Sans', 'Helvetica Neue', 'Segoe UI', 'Calibri', 'Arial', sans-serif;
-      font-size: 18px;
-      color: #60666d;
-    }
-    @media (min-width: 768px) {
-      .select-box {
-        width: 70%;
-      }
-    }
-    @media (min-width: 992px) {
-      .select-box {
-        width: 50%;
-      }
-    }
-    @media (min-width: 1200px) {
-      .select-box {
-        width: 30%;
-      }
-    }
     .main {
       width: 350px;
       height: 100%;
@@ -73,6 +57,20 @@
     span.wifiPSK {
       float: right;
       padding-top: 16px;
+    }
+    select {
+      margin-top: 10px;
+      margin-bottom: 10px;
+      /* margin-left: 20px;
+      margin-right: 20px; */
+      border: 1px solid #000;
+      padding: 10px 20px;
+      border-radius: 5px;
+      font-size: 16px;
+      width: 100%;
+    }
+    select:focus {
+      outline: none;
     }
     /* Change styles for span and cancel button on extra small screens */
     @media screen and (max-width: 200px) {
@@ -96,13 +94,14 @@
         <img src="https://www.w3schools.com/howto/img_avatar2.png" alt="Avatar" class="avatar">
       </div>
       <div class="container">
-        <label for="wifiSSID"><b>SSID</b></label>
+        <!-- <label for="wifiSSID"><b>SSID</b></label> -->
         <select name="wifiSSID" required>
-          <option disabled selected>Select Wi-Fi Network</option>
+          <option value="" selected disabled>Select Wi-Fi Network</option>
         </select>
         <br> <!-- Add this line -->
-        <label for="wifiPSK"><b>Password</b></label>
-        <input type="password" placeholder="Enter Password" name="wifiPSK" required>
+        <!-- <label for="wifiPSK"><b>Password</b></label> -->
+        <input type="password" placeholder="Enter Password" name="wifiPSK" required pattern=".{8,}" title="Password is too short" >
+
         <button type="submit">Save</button>
       </div>
       
@@ -120,8 +119,9 @@
         success: function(data) {
           selectElement.empty();
           if (data.length === 0) {
-            selectElement.append("<option disabled>No Wi-Fi networks available</option>");
+            selectElement.append("<option disabled selected>No Wi-Fi networks available</option>");
           } else {
+            selectElement.append("<option value='' selected disabled>Select Wi-Fi Network</option>"); // Add the default option
             $.each(data, function(index, value) {
               selectElement.append("<option value='" + value.name + "'>" + value.name + "</option>");
             });
@@ -130,7 +130,7 @@
         },
         error: function(xhr, status, error) {
           selectElement.empty();
-          selectElement.append("<option disabled>Error retrieving Wi-Fi networks</option>");
+          selectElement.append("<option disabled selected>Error retrieving Wi-Fi networks</option>");
           console.log(xhr);
           console.log(status);
           console.log(error);
