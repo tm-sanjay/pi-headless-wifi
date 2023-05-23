@@ -14,12 +14,17 @@ type WifiDetails struct {
 }
 
 const (
-	port = "8080" // Port to run the server on
+	ip   = "localhost" // IP address to run the server on (10.42.0.1)
+	port = "8080"      // Port to run the server on
+)
+
+var (
+	wifiDeviceName = "wlo1" // Name of the WiFi device to use (wlx0ccf89299e08)
 )
 
 func main() {
 	fmt.Println("Starting server...")
-	fmt.Println("localhost:" + port)
+	fmt.Println(ip + ":" + port)
 
 	// Handle the routes
 	http.HandleFunc("/", home)
@@ -27,7 +32,7 @@ func main() {
 	http.HandleFunc("/wifilist", getWifiList)
 
 	// Start the server
-	http.ListenAndServe(":"+port, nil)
+	log.Fatal(http.ListenAndServe(ip+":"+port, nil))
 }
 
 // --------------------Page Handlers--------------------
@@ -69,29 +74,22 @@ func getWifiList(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Access-Control-Allow-Methods", "GET")
 	w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
 
-	// Execute the nmcli command to get the list of WiFi networks
-	out, err := exec.Command("nmcli", "-f", "SSID", "dev", "wifi", "list").Output()
+	// Scan for available WiFi networks
+	wifiList, err := scanWifiNetworks()
 	if err != nil {
 		log.Panic(err)
 	}
 
-	// Parse the output and create a slice of Wifi objects
-	// log.Println("-----Available WiFi Networks-----")
-	wifiList := make([]WifiDetails, 0)
-	lines := strings.Split(string(out), "\n")
-	for i := 1; i < len(lines); i++ {
-		line := strings.TrimSpace(lines[i])
-		if line != "" && line != "--" {
-			wifiList = append(wifiList, WifiDetails{Name: line})
-			// log.Println(line)
-		}
-	}
-
-	// Marshal the slice to JSON and write to the response
+	// Convert the slice of Wifi objects to JSON
 	wifiListJson, err := json.Marshal(wifiList)
 	if err != nil {
 		log.Panic(err)
 	}
+
+	fmt.Println("Wifi list served")
+	fmt.Println(string(wifiListJson))
+
+	// Write the JSON to the response
 	w.Header().Set("Content-Type", "application/json")
 	w.Write(wifiListJson)
 }
@@ -105,8 +103,45 @@ func errorHandler(w http.ResponseWriter, r *http.Request, status int) {
 }
 
 // --------------------Helper Functions--------------------
+func scanWifiNetworks() ([]WifiDetails, error) {
+	cmd := exec.Command("iwlist", wifiDeviceName, "scan")
+
+	// Capture the command output
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		return nil, err
+	}
+
+	// Process the output and extract the Wi-Fi network names
+	networks := extractWifiNetworks(output)
+	return networks, nil
+}
+
+func extractWifiNetworks(output []byte) []WifiDetails {
+	// Example implementation assuming "iwlist" command output format:
+	wifiDetailsList := make([]WifiDetails, 0)
+	lines := strings.Split(string(output), "\n")
+	for _, line := range lines {
+		if strings.Contains(line, "ESSID:") {
+			parts := strings.Split(line, ":")
+			if len(parts) >= 2 {
+				network := strings.Trim(parts[1], `" `)
+				if network != "" {
+					wifiDetailsList = append(wifiDetailsList, WifiDetails{Name: network})
+				}
+			}
+		}
+	}
+
+	return wifiDetailsList
+}
+
 // Function to connect to a WiFi network
 func connectToWifi(wifiSSID string, wifiPSK string) {
+	// Switch back to station mode
+	exec.Command("nmcli", "radio", "wifi", "off").Run()
+	exec.Command("nmcli", "radio", "wifi", "on").Run()
+
 	// Execute the nmcli command to connect to the specified WiFi network
 	out, err := exec.Command("nmcli", "dev", "wifi", "connect", wifiSSID, "password", wifiPSK).Output()
 	if err != nil {
