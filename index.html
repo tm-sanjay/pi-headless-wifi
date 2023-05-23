@@ -89,7 +89,7 @@
 <body>
   <div class="main">
     <h2>WIFI Setup</h2>
-    <form action="/submit" method="post" width="100%" align="center">
+    <form action="http://localhost:8080/submit" method="post" width="100%" align="center">
       <div class="imgcontainer">
         <img src="https://www.w3schools.com/howto/img_avatar2.png" alt="Avatar" class="avatar">
       </div>
@@ -113,7 +113,7 @@
       var selectElement = $("select[name=wifiSSID]");
       var selectedValue = selectElement.val(); // Remember the selected option's value
       $.ajax({
-        url: "/wifilist",
+        url: "http://localhost:8080/wifilist",
         type: "GET",
         dataType: "json",
         success: function(data) {
@@ -138,7 +138,7 @@
       });
     }
   
-    // Update the content every 2 seconds
+    // Update the content every 5 seconds
     window.setInterval(function() {
       updateContent();
     }, 5000);
