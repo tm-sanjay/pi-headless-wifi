@@ -21,17 +21,26 @@ func main() {
 	fmt.Println("Starting server...")
 	fmt.Println("localhost:" + port)
 
+	// Handle the routes
 	http.HandleFunc("/", home)
 	http.HandleFunc("/submit", submit)
 	http.HandleFunc("/wifilist", getWifiList)
-	http.Handle("/static/", http.StripPrefix("/static/", http.FileServer(http.Dir("static"))))
+
+	// Start the server
 	http.ListenAndServe(":"+port, nil)
 }
 
+// --------------------Page Handlers--------------------
 // Function to handle the home page
 func home(w http.ResponseWriter, r *http.Request) {
 	// Serve the index.html file from the root directory
-	http.ServeFile(w, r, "index.html")
+	if r.URL.Path == "/" {
+		http.ServeFile(w, r, "index.html")
+		fmt.Println("Home page served")
+	} else {
+		// If the URL doesn't match the root directory, return 404
+		errorHandler(w, r, http.StatusNotFound)
+	}
 }
 
 // Function to handle the form submission
@@ -54,6 +63,12 @@ func submit(w http.ResponseWriter, r *http.Request) {
 
 // Function to get the list of available WiFi networks and return them as JSON
 func getWifiList(w http.ResponseWriter, r *http.Request) {
+
+	// Set the CORS headers
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+	w.Header().Set("Access-Control-Allow-Methods", "GET")
+	w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
+
 	// Execute the nmcli command to get the list of WiFi networks
 	out, err := exec.Command("nmcli", "-f", "SSID", "dev", "wifi", "list").Output()
 	if err != nil {
@@ -81,6 +96,15 @@ func getWifiList(w http.ResponseWriter, r *http.Request) {
 	w.Write(wifiListJson)
 }
 
+func errorHandler(w http.ResponseWriter, r *http.Request, status int) {
+	w.WriteHeader(status)
+	if status == http.StatusNotFound {
+		fmt.Fprint(w, "Page not found")
+		fmt.Println("Page not found")
+	}
+}
+
+// --------------------Helper Functions--------------------
 // Function to connect to a WiFi network
 func connectToWifi(wifiSSID string, wifiPSK string) {
 	// Execute the nmcli command to connect to the specified WiFi network
