@@ -13,16 +13,26 @@ type WifiDetails struct {
 	Name string `json:"name"`
 }
 
+type DeviceDetails struct {
+	Interface string `json:"interface"`
+	Mac       string `json:"mac"`
+}
+
 const (
 	ip   = "localhost" // IP address to run the server on (10.42.0.1)
 	port = "8080"      // Port to run the server on
 )
 
 var (
-	wifiDeviceName = "wlo1" // Name of the WiFi device to use (wlx0ccf89299e08)
+	deviceDetails DeviceDetails // Name of the WiFi device to use (wlx0ccf89299e08)
 )
 
 func main() {
+	deviceDetails = getDeviceDetails()
+	fmt.Println("Device Details:")
+	fmt.Println("  Name", deviceDetails.Interface)
+	fmt.Println("  MAC", deviceDetails.Mac)
+
 	fmt.Println("Starting server...")
 	fmt.Println(ip + ":" + port)
 
@@ -61,8 +71,8 @@ func submit(w http.ResponseWriter, r *http.Request) {
 	// Connect to the specified WiFi network
 	connectToWifi(wifiSSID, wifiPSK)
 
-	// Redirect the user back to the home page
-	http.Redirect(w, r, "/", http.StatusSeeOther)
+	// thanks for submitting text
+	fmt.Fprintf(w, "Thanks for submitting!")
 
 }
 
@@ -103,8 +113,36 @@ func errorHandler(w http.ResponseWriter, r *http.Request, status int) {
 }
 
 // --------------------Helper Functions--------------------
+
+// Function to get the name of the WiFi device to use
+func getDeviceDetails() DeviceDetails {
+	// Get Interface
+	inter, err := exec.Command("iw", "dev").Output()
+	if err != nil {
+		log.Panic(err)
+	}
+	interfaceString := string(inter)
+	interfaceString = strings.Split(interfaceString, "Interface ")[1]
+	interfaceString = strings.Split(interfaceString, "\n")[0]
+
+	//remove if any spaces or newlines
+	interfaceString = strings.TrimSpace(interfaceString)
+
+	// Get MAC
+	mac, err := exec.Command("cat", "/sys/class/net/"+interfaceString+"/address").CombinedOutput()
+
+	if err != nil {
+		log.Panic(err)
+	}
+	macString := string(mac)
+	macString = strings.TrimSpace(macString)
+
+	// Return DeviceDetails
+	return DeviceDetails{Interface: interfaceString, Mac: macString}
+}
+
 func scanWifiNetworks() ([]WifiDetails, error) {
-	cmd := exec.Command("iwlist", wifiDeviceName, "scan")
+	cmd := exec.Command("iwlist", deviceDetails.Interface, "scan")
 
 	// Capture the command output
 	output, err := cmd.CombinedOutput()
@@ -136,14 +174,14 @@ func extractWifiNetworks(output []byte) []WifiDetails {
 	return wifiDetailsList
 }
 
-// Function to connect to a WiFi network
+// Function to connect to the specified WiFi network
 func connectToWifi(wifiSSID string, wifiPSK string) {
 	// Switch back to station mode
-	exec.Command("nmcli", "radio", "wifi", "off").Run()
-	exec.Command("nmcli", "radio", "wifi", "on").Run()
+	// exec.Command("nmcli", "radio", "wifi", "off").Run()
+	// exec.Command("nmcli", "radio", "wifi", "on").Run()
 
 	// Execute the nmcli command to connect to the specified WiFi network
-	out, err := exec.Command("nmcli", "dev", "wifi", "connect", wifiSSID, "password", wifiPSK).Output()
+	out, err := exec.Command("nmcli", "dev", "wifi", "connect", wifiSSID, "password", wifiPSK).CombinedOutput()
 	if err != nil {
 		log.Panic(err)
 	}
