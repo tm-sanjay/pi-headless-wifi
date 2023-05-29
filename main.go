@@ -18,13 +18,19 @@ type DeviceDetails struct {
 	Mac       string `json:"mac"`
 }
 
+type Mode string
+
 const (
 	ip   = "localhost" // IP address to run the server on (10.42.0.1)
 	port = "8080"      // Port to run the server on
+
+	ModeAP  Mode = "AP"
+	ModeSTA Mode = "STA"
 )
 
 var (
 	deviceDetails DeviceDetails // Name of the WiFi device to use (wlx0ccf89299e08)
+	mode          Mode          // Mode to run the server in (AP or STA)
 )
 
 func main() {
@@ -32,6 +38,8 @@ func main() {
 	fmt.Println("Device Details:")
 	fmt.Println("  Name", deviceDetails.Interface)
 	fmt.Println("  MAC", deviceDetails.Mac)
+
+	switchToAPMode()
 
 	fmt.Println("Starting server...")
 	fmt.Println(ip + ":" + port)
@@ -46,6 +54,7 @@ func main() {
 }
 
 // --------------------Page Handlers--------------------
+
 // Function to handle the home page
 func home(w http.ResponseWriter, r *http.Request) {
 	// Serve the index.html file from the root directory
@@ -137,14 +146,12 @@ func getDeviceDetails() DeviceDetails {
 	macString := string(mac)
 	macString = strings.TrimSpace(macString)
 
-	// Return DeviceDetails
 	return DeviceDetails{Interface: interfaceString, Mac: macString}
 }
 
 func scanWifiNetworks() ([]WifiDetails, error) {
 	cmd := exec.Command("iwlist", deviceDetails.Interface, "scan")
 
-	// Capture the command output
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		return nil, err
@@ -156,7 +163,7 @@ func scanWifiNetworks() ([]WifiDetails, error) {
 }
 
 func extractWifiNetworks(output []byte) []WifiDetails {
-	// Example implementation assuming "iwlist" command output format:
+	//Extract the wifi networks from the output
 	wifiDetailsList := make([]WifiDetails, 0)
 	lines := strings.Split(string(output), "\n")
 	for _, line := range lines {
@@ -176,22 +183,20 @@ func extractWifiNetworks(output []byte) []WifiDetails {
 
 // Function to connect to the specified WiFi network
 func connectToWifi(wifiSSID string, wifiPSK string) {
-	// Switch back to station mode
-	// exec.Command("nmcli", "radio", "wifi", "off").Run()
-	// exec.Command("nmcli", "radio", "wifi", "on").Run()
-
+	mode = ModeSTA
 	// Execute the nmcli command to connect to the specified WiFi network
 	out, err := exec.Command("nmcli", "dev", "wifi", "connect", wifiSSID, "password", wifiPSK).CombinedOutput()
 	if err != nil {
 		log.Panic(err)
 	}
 
-	// Print the output to the console to confirm the connection was successful
 	fmt.Println(string(out))
 
 	//if connection was successful
 	if strings.Contains(string(out), "successfully activated") {
 		log.Println("Successfully connected to", wifiSSID)
+		//auto connect to this network on boot
+		exec.Command("nmcli", "con", "modify", wifiSSID, "connection.autoconnect", "yes").CombinedOutput()
 	} else {
 		log.Println("!Failed to connect to", wifiSSID)
 	}
