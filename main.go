@@ -5,8 +5,12 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"os"
 	"os/exec"
 	"strings"
+	"time"
+
+	"github.com/joho/godotenv"
 )
 
 type WifiDetails struct {
@@ -23,14 +27,13 @@ type Mode string
 const (
 	ip   = "localhost" // IP address to run the server on (10.42.0.1)
 	port = "8080"      // Port to run the server on
-
-	ModeAP  Mode = "AP"
-	ModeSTA Mode = "STA"
 )
 
 var (
-	deviceDetails DeviceDetails // Name of the WiFi device to use (wlx0ccf89299e08)
-	mode          Mode          // Mode to run the server in (AP or STA)
+	deviceDetails           DeviceDetails // Name of the WiFi device to use (wlx0ccf89299e08)
+	wasConnectedToNet       bool          // Whether the device was connected to wifi before
+	wasNeverConnectedToWifi bool          // Whether the device was never connected to wifi before
+	isConnected             bool          // Whether the device is currently connected to the internet
 )
 
 func main() {
@@ -39,8 +42,6 @@ func main() {
 	fmt.Println("  Name", deviceDetails.Interface)
 	fmt.Println("  MAC", deviceDetails.Mac)
 
-	switchToAPMode()
-
 	fmt.Println("Starting server...")
 	fmt.Println(ip + ":" + port)
 
@@ -48,6 +49,10 @@ func main() {
 	http.HandleFunc("/", home)
 	http.HandleFunc("/submit", submit)
 	http.HandleFunc("/wifilist", getWifiList)
+
+	readEnv()
+
+	go switchBetweenModes() // Start the goroutine to switch between AP and STA modes
 
 	// Start the server
 	log.Fatal(http.ListenAndServe(ip+":"+port, nil))
@@ -149,6 +154,99 @@ func getDeviceDetails() DeviceDetails {
 	return DeviceDetails{Interface: interfaceString, Mac: macString}
 }
 
+// Function to read environment variables
+func readEnv() {
+	// Read the environment variables from the .env file if not found create one
+	envFilePath := ".env"
+
+	// Check if the .env file exists
+	_, err := os.Stat(envFilePath)
+	if os.IsNotExist(err) {
+		// Create a new .env file with default values
+		err = createDefaultEnvFile(envFilePath)
+		if err != nil {
+			log.Fatal("Error creating .env file:", err)
+		}
+	}
+
+	// Load the environment variables
+	err = godotenv.Load(envFilePath)
+	if err != nil {
+		log.Fatal("Error loading .env file:", err)
+	}
+
+	saved_ssid := os.Getenv("WIFI_SSID")
+	// saved_psk := os.Getenv("WIFI_PASSWORD")
+
+	// log.Println("SSID: " + saved_ssid)
+	// log.Println("PSK: " + saved_psk)
+
+	if saved_ssid == "" {
+		fmt.Println("No saved SSID")
+		wasNeverConnectedToWifi = true
+		wasConnectedToNet = false
+	} else {
+		fmt.Println("Saved SSID")
+		wasNeverConnectedToWifi = false
+		wasConnectedToNet = true
+	}
+}
+
+// Function to create a default .env file
+func createDefaultEnvFile(filepath string) error {
+	fmt.Println("Creating default .env file")
+	file, err := os.Create(filepath)
+	if err != nil {
+		return err
+	}
+	defer file.Close()
+
+	// Write default environment variable values to the file
+	defaultEnvContent := []byte(
+		`WIFI_SSID=
+WIFI_PASSWORD=
+`,
+	)
+
+	_, err = file.Write(defaultEnvContent)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// Function to switch between AP and STA modes
+func switchBetweenModes() {
+	// while statement to keep the program running
+	for {
+		//wait for 15 seconds before checking for internet connection
+		time.Sleep(15 * time.Second)
+		isConnected = checkForInternet()
+		if !isConnected {
+			// If the device is not connected to the internet, switch to AP mode
+			if wasNeverConnectedToWifi {
+				log.Println("Was never connected to wifi")
+				switchToAPMode()
+			} else {
+				if wasConnectedToNet {
+					log.Println("Scanning for previously saved wifi")
+					switchToSTAMode()
+					wasConnectedToNet = false
+				} else {
+					log.Println("Was connected to wifi but lost connection")
+					switchToAPMode()
+					wasConnectedToNet = true //helps to switch back to STA mode when internet is back
+				}
+			}
+		} else {
+			wasConnectedToNet = true
+		}
+		//check for internet connection every 5 minutes
+		time.Sleep(5 * time.Minute)
+	}
+}
+
 func scanWifiNetworks() ([]WifiDetails, error) {
 	cmd := exec.Command("iwlist", deviceDetails.Interface, "scan")
 
@@ -183,9 +281,10 @@ func extractWifiNetworks(output []byte) []WifiDetails {
 
 // Function to connect to the specified WiFi network
 func connectToWifi(wifiSSID string, wifiPSK string) {
-	mode = ModeSTA
+	exec.Command("nmcli", "connection", "down", ApName)
 	// Execute the nmcli command to connect to the specified WiFi network
 	out, err := exec.Command("nmcli", "dev", "wifi", "connect", wifiSSID, "password", wifiPSK).CombinedOutput()
+	fmt.Println(string(out))
 	if err != nil {
 		log.Panic(err)
 	}
@@ -196,8 +295,44 @@ func connectToWifi(wifiSSID string, wifiPSK string) {
 	if strings.Contains(string(out), "successfully activated") {
 		log.Println("Successfully connected to", wifiSSID)
 		//auto connect to this network on boot
-		exec.Command("nmcli", "con", "modify", wifiSSID, "connection.autoconnect", "yes").CombinedOutput()
+		exec.Command("nmcli", "con", "modify", wifiSSID, "connection.autoconnect", "yes").Run()
+		//save the ssid and psk to the .env file
+		os.Setenv("WIFI_SSID", wifiSSID)
+		os.Setenv("WIFI_PASSWORD", wifiPSK)
+
+		wasConnectedToNet = true
+		wasNeverConnectedToWifi = false
 	} else {
 		log.Println("!Failed to connect to", wifiSSID)
+		wasConnectedToNet = false
 	}
 }
+
+// Function to check for internet connection
+func checkForInternet() bool {
+	out, err := exec.Command("ping", "-c", "1", "google.com").Output()
+	if err != nil {
+		log.Panic(err)
+	}
+	// fmt.Println(string(out))
+	if strings.Contains(string(out), "1 received") {
+		fmt.Println("Internet is available")
+		return true
+	} else {
+		fmt.Println("Internet is not available")
+		return false
+	}
+}
+
+// Function to switch to AP mode
+func switchToSTAMode() {
+	// Switch to STA mode
+	fmt.Println("Switching to STA mode")
+	// stop the access point
+	exec.Command("nmcli", "connection", "down", ApName)
+
+	exec.Command("nmcli", "radio", "wifi", "on").CombinedOutput()
+	//restart network manager
+	exec.Command("systemctl", "restart", "NetworkManager").CombinedOutput()
+}
+
