@@ -54,6 +54,7 @@ func main() {
 
 	go switchBetweenModes() // Start the goroutine to switch between AP and STA modes
 
+	// TODO:Start and stop the server based on AP mode else it will crash
 	// Start the server
 	log.Fatal(http.ListenAndServe(ip+":"+port, nil))
 }
@@ -221,8 +222,9 @@ func switchBetweenModes() {
 	// while statement to keep the program running
 	for {
 		//wait for 15 seconds before checking for internet connection
-		time.Sleep(15 * time.Second)
+		time.Sleep(1 * time.Second)
 		isConnected = checkForInternet()
+		isEthernetConnected()
 		if !isConnected {
 			// If the device is not connected to the internet, switch to AP mode
 			if wasNeverConnectedToWifi {
@@ -336,3 +338,20 @@ func switchToSTAMode() {
 	exec.Command("systemctl", "restart", "NetworkManager").CombinedOutput()
 }
 
+// Function to check if ethernet is connected
+func isEthernetConnected() bool {
+	// ifconfig eth1 up
+	out, err := exec.Command("ifconfig", "eth1").CombinedOutput()
+	// log.Println(string(out))
+	if err != nil {
+		log.Println(err)
+	}
+	// fmt.Println(string(out))
+	if strings.Contains(string(out), "inet") {
+		fmt.Println("Ethernet is connected")
+		return true
+	} else {
+		fmt.Println("Ethernet is not connected")
+		return false
+	}
+}
