@@ -25,8 +25,9 @@ type DeviceDetails struct {
 type Mode string
 
 const (
-	ip   = "localhost" // IP address to run the server on (10.42.0.1)
-	port = "8080"      // Port to run the server on
+	ip          = "10.42.0.1" // IP address to run the server on (10.42.0.1)
+	port        = "8080"      // Port to run the server on
+	envFilePath = ".env"
 )
 
 var (
@@ -51,12 +52,13 @@ func main() {
 	http.HandleFunc("/wifilist", getWifiList)
 
 	readEnv()
-
-	go switchBetweenModes() // Start the goroutine to switch between AP and STA modes
+	switchToAPMode()
 
 	// TODO:Start and stop the server based on AP mode else it will crash
 	// Start the server
-	log.Fatal(http.ListenAndServe(ip+":"+port, nil))
+	go initServer()
+
+	switchBetweenModes() // Start the goroutine to switch between AP and STA modes
 }
 
 // --------------------Page Handlers--------------------
@@ -158,22 +160,20 @@ func getDeviceDetails() DeviceDetails {
 // Function to read environment variables
 func readEnv() {
 	// Read the environment variables from the .env file if not found create one
-	envFilePath := ".env"
-
 	// Check if the .env file exists
 	_, err := os.Stat(envFilePath)
 	if os.IsNotExist(err) {
 		// Create a new .env file with default values
 		err = createDefaultEnvFile(envFilePath)
 		if err != nil {
-			log.Fatal("Error creating .env file:", err)
+			log.Panic("Error creating .env file:", err)
 		}
 	}
 
 	// Load the environment variables
 	err = godotenv.Load(envFilePath)
 	if err != nil {
-		log.Fatal("Error loading .env file:", err)
+		log.Panic("Error loading .env file:", err)
 	}
 
 	saved_ssid := os.Getenv("WIFI_SSID")
@@ -284,14 +284,36 @@ func extractWifiNetworks(output []byte) []WifiDetails {
 // Function to connect to the specified WiFi network
 func connectToWifi(wifiSSID string, wifiPSK string) {
 	exec.Command("nmcli", "connection", "down", ApName)
+	// //restart the network manager
+	// exec.Command("systemctl", "restart", "NetworkManager.service").Run()
+	// //scan for wifi networks
+	// exec.Command("nmcli", "dev", "wifi", "rescan").Run()
 	// Execute the nmcli command to connect to the specified WiFi network
-	out, err := exec.Command("nmcli", "dev", "wifi", "connect", wifiSSID, "password", wifiPSK).CombinedOutput()
-	fmt.Println(string(out))
+	out, err := exec.Command("nmcli", "dev", "disconnect", deviceDetails.Interface).CombinedOutput()
+	// fmt.Println(string(out))
 	if err != nil {
 		log.Panic(err)
 	}
 
 	fmt.Println(string(out))
+	time.Sleep(2 * time.Second)
+	// Create the command to execute the shell script
+	cmd := exec.Command("/bin/bash", "-c", "./connect_wifi.sh")
+	cmd.Stdin = os.Stdin
+
+	// Set the environment variables for SSID and PSK
+	cmd.Env = append(os.Environ(), "SSID="+wifiSSID, "PSK="+wifiSSID)
+
+	// Capture the output of the command
+	out, err = cmd.Output()
+	if err != nil {
+		log.Println("Failed to execute the shell script:", err)
+		log.Println("Out:", string(out))
+	}
+
+	// Print the captured output
+	log.Println("Shell script output:")
+	log.Println(string(out))
 
 	//if connection was successful
 	if strings.Contains(string(out), "successfully activated") {
@@ -299,8 +321,14 @@ func connectToWifi(wifiSSID string, wifiPSK string) {
 		//auto connect to this network on boot
 		exec.Command("nmcli", "con", "modify", wifiSSID, "connection.autoconnect", "yes").Run()
 		//save the ssid and psk to the .env file
-		os.Setenv("WIFI_SSID", wifiSSID)
-		os.Setenv("WIFI_PASSWORD", wifiPSK)
+		env, err := godotenv.Unmarshal("WIFI_SSID=" + wifiSSID + "\nWIFI_PASSWORD=" + wifiPSK)
+		if err != nil {
+			log.Panic("Error unmarshalling .env file:", err)
+		}
+		err = godotenv.Write(env, envFilePath)
+		if err != nil {
+			log.Panic("Error writing .env file:", err)
+		}
 
 		wasConnectedToNet = true
 		wasNeverConnectedToWifi = false
@@ -331,11 +359,11 @@ func switchToSTAMode() {
 	// Switch to STA mode
 	fmt.Println("Switching to STA mode")
 	// stop the access point
-	exec.Command("nmcli", "connection", "down", ApName)
+	exec.Command("nmcli", "connection", "down", ApName).Run()
 
-	exec.Command("nmcli", "radio", "wifi", "on").CombinedOutput()
+	exec.Command("nmcli", "radio", "wifi", "on").Run()
 	//restart network manager
-	exec.Command("systemctl", "restart", "NetworkManager").CombinedOutput()
+	exec.Command("systemctl", "restart", "NetworkManager").Run()
 }
 
 // Function to check if ethernet is connected

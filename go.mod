@@ -1,3 +1,5 @@
-module github.com/tm-sanjay/IQM
+module github/sanjay/iqm
 
 go 1.19
+
+require github.com/joho/godotenv v1.5.1
