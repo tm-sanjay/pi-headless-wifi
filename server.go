@@ -23,10 +23,10 @@ func initServer() {
 	fmt.Println("Starting server...")
 	fmt.Println(ip + ":" + port)
 
-	// Handle the routes
-	http.HandleFunc("/", home)
-	http.HandleFunc("/submit", submit)
-	http.HandleFunc("/wifilist", getWifiList)
+	// // Handle the routes
+	// http.HandleFunc("/", home)
+	// http.HandleFunc("/submit", submit)
+	// http.HandleFunc("/wifilist", getWifiList)
 
 	// Start the HTTP server in a separate goroutine
 	go func() {

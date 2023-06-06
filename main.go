@@ -342,7 +342,7 @@ func connectToWifi(wifiSSID string, wifiPSK string) {
 func checkForInternet() bool {
 	out, err := exec.Command("ping", "-c", "1", "google.com").Output()
 	if err != nil {
-		log.Panic(err)
+		log.Println(err)
 	}
 	// fmt.Println(string(out))
 	if strings.Contains(string(out), "1 received") {
